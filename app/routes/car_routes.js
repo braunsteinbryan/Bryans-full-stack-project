@@ -30,7 +30,8 @@ const router = express.Router()
 // INDEX
 // GET /examples
 router.get('/get-cars', requireToken, (req, res, next) => {
-  Car.find()
+  const userId = req.user._id
+  Car.find({owner: userId})
     .then(cars => {
       // `examples` will be an array of Mongoose documents
       // we want to convert each one to a POJO, so we use `.map` to
@@ -48,6 +49,14 @@ router.get('/get-a-car/:id', requireToken, (req, res, next) => {
   // req.params.id will be set based on the `:id` in the route
   Car.findById(req.params.id)
     .then(handle404)
+    .then(car => {
+      // pass the `req` object and the Mongoose record to `requireOwnership`
+      // it will throw an error if the current user isn't the owner
+      requireOwnership(req, car)
+
+      // pass the result of Mongoose's `.update` to the next `.then`
+      return car
+    })
     // if `findById` is succesful, respond with 200 and "example" JSON
     .then(car => res.status(200).json({ car: car.toObject() }))
     // if an error occurs, pass it to the handler
@@ -59,7 +68,6 @@ router.get('/get-a-car/:id', requireToken, (req, res, next) => {
 router.post('/create-a-car', requireToken, (req, res, next) => {
   // set owner of new example to be current user
   req.body.car.owner = req.user.id
-
   Car.create(req.body.car)
     // respond to succesful `create` with status 201 and JSON of new "example"
     .then(car => {
@@ -77,7 +85,7 @@ router.patch('/update-car/:id', requireToken, removeBlanks, (req, res, next) => 
   // if the client attempts to change the `owner` property by including a new
   // owner, prevent that by deleting that key/value pair
   delete req.body.car.owner
-
+  console.log(req.body)
   Car.findById(req.params.id)
     .then(handle404)
     .then(car => {
@@ -89,14 +97,16 @@ router.patch('/update-car/:id', requireToken, removeBlanks, (req, res, next) => 
       return car.updateOne(req.body.car)
     })
     // if that succeeded, return 204 and no JSON
-    .then(() => res.sendStatus(204))
+    .then(car => {
+      res.sendStatus(200)
+    })
     // if an error occurs, pass it to the handler
     .catch(next)
 })
 
 // DESTROY
 // DELETE /examples/5a7db6c74d55bc51bdf39793
-router.delete('/destory-car/:id', requireToken, (req, res, next) => {
+router.delete('/destroy-car/:id', requireToken, (req, res, next) => {
   Car.findById(req.params.id)
     .then(handle404)
     .then(car => {
